@@ -201,7 +201,7 @@ export default function SearchPage() {
                         </SelectContent>
                       </Select>
                     </div>
-                  </div>
+        </div>
 
                   {/* Content Filters */}
                   <div className="space-y-4">

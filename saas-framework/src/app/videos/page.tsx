@@ -1,8 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Trash2, Plus, Wand2, ImageIcon, RotateCcw } from 'lucide-react';
 
 interface AirtableRecord {
   id: string;
@@ -22,10 +24,36 @@ interface ErrorResponse {
   status?: number;
 }
 
+// Video button component to ensure proper URL binding
+const VideoButton = ({ url, recordId }: { url: string; recordId: string }) => {
+  const handleClick = (e: React.MouseEvent) => {
+    console.log(`Video button clicked for record ${recordId}:`, url);
+    console.log('Actual href:', e.currentTarget.getAttribute('href'));
+  };
+
+  return (
+    <a 
+      href={url} 
+      target="_blank" 
+      rel="noopener noreferrer"
+      className="inline-flex items-center px-3 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md transition-colors"
+      onClick={handleClick}
+    >
+      <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
+      </svg>
+      Watch
+    </a>
+  );
+};
+
 export default function VideosPage() {
   const [data, setData] = useState<AirtableResponse | null>(null);
   const [error, setError] = useState<ErrorResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deletingRecordId, setDeletingRecordId] = useState<string | null>(null);
+  const router = useRouter();
 
   const fetchData = async () => {
     try {
@@ -38,6 +66,13 @@ export default function VideosPage() {
       if (!response.ok) {
         setError(result);
         return;
+      }
+
+      // Debug logging to understand data structure
+      console.log('DEBUG - Airtable response:', result);
+      if (result.records && result.records.length > 0) {
+        console.log('DEBUG - First record fields:', result.records[0].fields);
+        console.log('DEBUG - Available columns:', result.columns);
       }
 
       setData(result);
@@ -55,21 +90,194 @@ export default function VideosPage() {
     fetchData();
   }, []);
 
-  const renderTableCell = (value: unknown) => {
+  // Handler functions for action buttons
+  const handleAddMoreResults = () => {
+    router.push('/');
+  };
+
+  const handleGenerateTitles = () => {
+    // Placeholder - will implement later
+    console.log('Generate Titles - Coming soon!');
+  };
+
+  const handleGenerateThumbnailAssets = () => {
+    // Placeholder - will implement later
+    console.log('Generate Thumbnail Assets - Coming soon!');
+  };
+
+  const handleClearResults = async () => {
+    if (!data || data.records.length === 0) return;
+    
+    const confirmed = confirm(`Are you sure you want to delete all ${data.records.length} records? This action cannot be undone.`);
+    if (!confirmed) return;
+
+    try {
+      setIsDeleting(true);
+      const recordIds = data.records.map(record => record.id);
+      
+      const response = await fetch('/api/airtable/delete', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ recordIds }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to clear results: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      console.log('Clear results successful:', result);
+      
+      // Redirect to search page after successful deletion
+      router.push('/');
+    } catch (error) {
+      console.error('Clear results error:', error);
+      alert('Failed to clear results. Please try again.');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleDeleteRecord = async (recordId: string) => {
+    const confirmed = confirm('Are you sure you want to delete this record? This action cannot be undone.');
+    if (!confirmed) return;
+
+    try {
+      setDeletingRecordId(recordId);
+      
+      const response = await fetch('/api/airtable/delete', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ recordIds: recordId }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to delete record: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      console.log('Delete record successful:', result);
+      
+      // Refresh the data to reflect the deletion
+      await fetchData();
+    } catch (error) {
+      console.error('Delete record error:', error);
+      alert('Failed to delete record. Please try again.');
+    } finally {
+      setDeletingRecordId(null);
+    }
+  };
+
+  const renderTableCell = (value: unknown, columnName: string, recordId?: string) => {
     if (value === null || value === undefined) {
       return <span className="text-muted-foreground italic">-</span>;
     }
+
+    // Debug logging to help understand data structure
+    if (columnName === 'Thumbnail' || columnName === 'Open Video') {
+      console.log(`DEBUG - ${columnName} column data:`, value);
+    }
     
+    // Handle Thumbnail column - expect array of objects with url field
+    if (columnName === 'Thumbnail' && Array.isArray(value)) {
+      if (value.length > 0 && value[0] && typeof value[0] === 'object' && 'url' in value[0]) {
+        const thumbnailUrl = (value[0] as { url: string }).url;
+        return (
+          <div className="flex justify-center">
+            <img 
+              src={thumbnailUrl} 
+              alt="Video thumbnail" 
+              className="w-32 h-20 object-cover rounded-md shadow-sm border"
+              loading="lazy"
+              onLoad={() => console.log('Thumbnail loaded successfully:', thumbnailUrl)}
+              onError={(e) => {
+                console.error('Thumbnail failed to load:', thumbnailUrl);
+                const target = e.target as HTMLImageElement;
+                target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTI4IiBoZWlnaHQ9IjgwIiB2aWV3Qm94PSIwIDAgMTI4IDgwIiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPgo8cmVjdCB3aWR0aD0iMTI4IiBoZWlnaHQ9IjgwIiBmaWxsPSIjRjNGNEY2Ii8+CjxwYXRoIGQ9Ik01NCA0MEw3NCA1Mkw1NCA2NFY0MFoiIGZpbGw9IiM5Q0E0QUYiLz4KPC9zdmc+';
+                target.alt = 'Thumbnail unavailable';
+              }}
+            />
+          </div>
+        );
+      } else {
+        console.log('Thumbnail data structure unexpected:', value);
+        return <span className="text-muted-foreground italic">No thumbnail</span>;
+      }
+    }
+    
+    // Handle Open Video column - expect URL string or object with URL
+    if (columnName === 'Open Video') {
+      let videoUrl: string | null = null;
+      
+      // Enhanced debugging for URL extraction
+      console.log('DEBUG - Processing Open Video value:', {
+        type: typeof value,
+        isArray: Array.isArray(value),
+        value: value
+      });
+      
+      if (typeof value === 'string' && value.startsWith('http')) {
+        videoUrl = value;
+        console.log('DEBUG - Found string URL:', videoUrl);
+      } else if (Array.isArray(value) && value.length > 0) {
+        console.log('DEBUG - Processing array with length:', value.length);
+        // Sometimes URLs might be in an array
+        if (typeof value[0] === 'string' && value[0].startsWith('http')) {
+          videoUrl = value[0];
+          console.log('DEBUG - Found array string URL:', videoUrl);
+        } else if (typeof value[0] === 'object' && value[0] && 'url' in value[0]) {
+          videoUrl = (value[0] as { url: string }).url;
+          console.log('DEBUG - Found array object URL:', videoUrl);
+        }
+      } else if (typeof value === 'object' && value && 'url' in value) {
+        videoUrl = (value as { url: string }).url;
+        console.log('DEBUG - Found object URL:', videoUrl);
+      }
+      
+      if (videoUrl) {
+        return <VideoButton url={videoUrl} recordId={recordId || 'unknown'} />;
+      } else {
+        console.log('Open Video data structure unexpected:', value);
+        return <span className="text-muted-foreground italic">No video URL</span>;
+      }
+    }
+    
+    // Default handling for other columns
     if (Array.isArray(value)) {
       return value.join(', ');
     }
     
     if (typeof value === 'object') {
-      return JSON.stringify(value);
+      return (
+        <details className="cursor-pointer">
+          <summary className="text-sm text-muted-foreground">View data</summary>
+          <pre className="text-xs mt-2 p-2 bg-muted rounded max-w-xs overflow-auto">
+            {JSON.stringify(value, null, 2)}
+          </pre>
+        </details>
+      );
     }
     
     return String(value);
   };
+
+  // Columns to hide from the table display
+  const hiddenColumns = [
+    'Video ID',
+    'Description', 
+    'Created',
+    '# Subscribers',
+    'YouTube URL'
+  ];
+
+  // Filter out hidden columns
+  const visibleColumns = data?.columns.filter(column => 
+    !hiddenColumns.includes(column)
+  ) || [];
 
   return (
     <div className="container mx-auto px-4 py-10">
@@ -84,7 +292,7 @@ export default function VideosPage() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle>Airtable Data</CardTitle>
+              <CardTitle>YouTube Analytics Data</CardTitle>
               <CardDescription>
                 {data ? `${data.totalRecords} records found` : 'Loading data...'}
               </CardDescription>
@@ -137,38 +345,96 @@ export default function VideosPage() {
                   <p className="text-muted-foreground">No records found in your Airtable.</p>
                 </div>
               ) : (
-                <div className="overflow-x-auto">
+                <>
+                  {/* Action Buttons */}
+                  <div className="flex flex-wrap gap-2 justify-end mb-4">
+                    <Button
+                      onClick={handleAddMoreResults}
+                      variant="default"
+                      size="sm"
+                      className="flex items-center gap-2"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Add More Results
+                    </Button>
+                    
+                    <Button
+                      onClick={handleGenerateTitles}
+                      variant="outline"
+                      size="sm"
+                      className="flex items-center gap-2"
+                      disabled
+                    >
+                      <Wand2 className="w-4 h-4" />
+                      Generate Titles
+                    </Button>
+                    
+                    <Button
+                      onClick={handleGenerateThumbnailAssets}
+                      variant="outline"
+                      size="sm"
+                      className="flex items-center gap-2"
+                      disabled
+                    >
+                      <ImageIcon className="w-4 h-4" />
+                      Generate Thumbnail Assets
+                    </Button>
+                    
+                    <Button
+                      onClick={handleClearResults}
+                      variant="destructive"
+                      size="sm"
+                      className="flex items-center gap-2"
+                      disabled={isDeleting}
+                    >
+                      <RotateCcw className="w-4 h-4" />
+                      {isDeleting ? 'Clearing...' : 'Clear Results'}
+                    </Button>
+                  </div>
+
+                  <div className="overflow-x-auto">
                   <table className="w-full border-collapse border border-border">
                     <thead>
                       <tr className="bg-muted/50">
-                        <th className="border border-border p-3 text-left font-semibold">ID</th>
-                        {data.columns.map((column) => (
+                        {visibleColumns.map((column) => (
                           <th key={column} className="border border-border p-3 text-left font-semibold">
                             {column}
                           </th>
                         ))}
-                        <th className="border border-border p-3 text-left font-semibold">Created</th>
+                        <th className="border border-border p-3 text-left font-semibold w-24">
+                          Actions
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
                       {data.records.map((record) => (
                         <tr key={record.id} className="hover:bg-muted/25">
-                          <td className="border border-border p-3 font-mono text-sm">
-                            {record.id}
-                          </td>
-                          {data.columns.map((column) => (
+                          {visibleColumns.map((column) => (
                             <td key={column} className="border border-border p-3">
-                              {renderTableCell(record.fields[column])}
+                              {renderTableCell(record.fields[column], column, record.id)}
                             </td>
                           ))}
-                          <td className="border border-border p-3 text-sm text-muted-foreground">
-                            {new Date(record.createdTime).toLocaleDateString()}
+                          <td className="border border-border p-3">
+                            <Button
+                              onClick={() => handleDeleteRecord(record.id)}
+                              variant="ghost"
+                              size="sm"
+                              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                              disabled={deletingRecordId === record.id}
+                            >
+                              {deletingRecordId === record.id ? (
+                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
+                              ) : (
+                                <Trash2 className="w-4 h-4" />
+                              )}
+                            </Button>
                           </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
+                </>
               )}
             </div>
           )}
@@ -188,25 +454,25 @@ export default function VideosPage() {
           
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-lg">Columns</CardTitle>
+              <CardTitle className="text-lg">Visible Columns</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold">{data.columns.length}</div>
+              <div className="text-3xl font-bold">{visibleColumns.length}</div>
             </CardContent>
           </Card>
           
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-lg">Fields</CardTitle>
+              <CardTitle className="text-lg">Visible Fields</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-sm space-y-1">
-                {data.columns.slice(0, 3).map((column) => (
+                {visibleColumns.slice(0, 3).map((column) => (
                   <div key={column} className="truncate">{column}</div>
                 ))}
-                {data.columns.length > 3 && (
+                {visibleColumns.length > 3 && (
                   <div className="text-muted-foreground">
-                    +{data.columns.length - 3} more...
+                    +{visibleColumns.length - 3} more...
                   </div>
                 )}
               </div>
