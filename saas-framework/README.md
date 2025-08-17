@@ -61,10 +61,20 @@ npm install
 Copy the `.env.local` file and update the Airtable credentials:
 
 ```env
+# Airtable Configuration
 AIRTABLE_API_KEY=your_airtable_api_key_here
 AIRTABLE_BASE_ID=your_airtable_base_id_here
 AIRTABLE_TABLE_NAME=your_table_name_here
 AIRTABLE_TABLE_ID=your_airtable_table_id_here
+
+# Webhook URLs for n8n automation
+SEARCH_WEBHOOK=your_n8n_search_webhook_url_here
+GENERATE_TITLES_WEBHOOK=your_n8n_titles_webhook_url_here
+GENERATE_IMAGES_WEBHOOK=your_n8n_images_webhook_url_here
+
+# For local testing, you can use these test endpoints:
+# GENERATE_TITLES_WEBHOOK=http://localhost:3000/api/webhook-test-titles
+# GENERATE_IMAGES_WEBHOOK=http://localhost:3000/api/webhook-test-images
 ```
 
 4. Run the development server:
@@ -151,6 +161,88 @@ This framework is set up for Airtable integration. To connect your Airtable base
 2. Find your Base ID from the API documentation
 3. Update the `.env.local` file with your credentials
 4. Create API routes or use the credentials in your components
+
+## 🔗 Webhook Integration
+
+This framework includes webhook integration for automating YouTube analytics workflows with n8n or similar automation tools.
+
+### Available Webhooks
+
+1. **Search Webhook** (`SEARCH_WEBHOOK`)
+   - Triggered when users perform YouTube video searches
+   - Sends search parameters to your automation workflow
+   - Used in: `/api/search`
+
+2. **Generate Titles Webhook** (`GENERATE_TITLES_WEBHOOK`)
+   - Triggered when users click "Generate Titles" 
+   - Sends video data array for AI-powered title generation
+   - Used in: `/api/generate-titles`
+
+3. **Generate Images Webhook** (`GENERATE_IMAGES_WEBHOOK`)
+   - Triggered when users click "Generate Thumbnail Assets"
+   - Sends video data array for AI-powered image generation
+   - Used in: `/api/generate-images`
+
+### Webhook Payload Structure
+
+All webhooks receive JSON payloads with the following structure:
+
+**Search Webhook:**
+```json
+{
+  "q": "search query",
+  "regionCode": "US",
+  "relevanceLanguage": "en",
+  "videoDuration": "medium",
+  "publishedAfter": "2024-01-01T00:00:00.000Z",
+  "publishedBefore": "2024-12-31T23:59:59.999Z",
+  "order": "relevance",
+  "maxResults": 50
+}
+```
+
+**Title/Image Generation Webhooks:**
+```json
+{
+  "videoData": [
+    {
+      "id": "airtable_record_id",
+      "fields": {
+        "Title": "Video Title",
+        "Views": "1000000",
+        "Channel Name": "Channel Name",
+        // ... other Airtable fields
+      },
+      "createdTime": "2024-01-01T00:00:00.000Z"
+    }
+  ],
+  "timestamp": "2024-01-01T00:00:00.000Z",
+  "requestId": "titles_1234567890"
+}
+```
+
+### Setting Up Webhooks
+
+1. Create webhook endpoints in your automation tool (n8n, Zapier, etc.)
+2. Add the webhook URLs to your `.env.local` file
+3. Configure your automation workflows to process the incoming data
+4. Optionally, set up return webhooks to update your Airtable with results
+
+### Testing Webhooks Locally
+
+For development and testing, you can use the included test webhook endpoints:
+
+```env
+# Use these for local testing
+GENERATE_TITLES_WEBHOOK=http://localhost:3000/api/webhook-test-titles
+GENERATE_IMAGES_WEBHOOK=http://localhost:3000/api/webhook-test-images
+```
+
+These test endpoints will:
+- Log the received payload to your console
+- Simulate processing delays
+- Return mock responses for titles and thumbnail concepts
+- Help you understand the data structure before setting up real automation
 
 ### Example API Route
 

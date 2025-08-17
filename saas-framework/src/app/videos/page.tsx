@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Trash2, Plus, Wand2, ImageIcon, RotateCcw } from 'lucide-react';
+import { GenerateTitlesModal } from '@/components/generate-titles-modal';
 
 interface AirtableRecord {
   id: string;
@@ -53,6 +54,8 @@ export default function VideosPage() {
   const [loading, setLoading] = useState(true);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deletingRecordId, setDeletingRecordId] = useState<string | null>(null);
+  const [isGeneratingImages, setIsGeneratingImages] = useState(false);
+  const [showTitlesModal, setShowTitlesModal] = useState(false);
   const router = useRouter();
 
   const fetchData = async () => {
@@ -96,13 +99,61 @@ export default function VideosPage() {
   };
 
   const handleGenerateTitles = () => {
-    // Placeholder - will implement later
-    console.log('Generate Titles - Coming soon!');
+    if (!data || data.records.length === 0) {
+      alert('No videos found to generate titles for.');
+      return;
+    }
+    setShowTitlesModal(true);
   };
 
-  const handleGenerateThumbnailAssets = () => {
-    // Placeholder - will implement later
-    console.log('Generate Thumbnail Assets - Coming soon!');
+  const handleGenerateThumbnailAssets = async () => {
+    if (!data || data.records.length === 0) {
+      alert('No videos found to generate thumbnail assets for.');
+      return;
+    }
+
+    try {
+      setIsGeneratingImages(true);
+      
+      // Prepare video data for the webhook
+      const videoData = data.records.map(record => ({
+        id: record.id,
+        fields: record.fields,
+        createdTime: record.createdTime
+      }));
+
+      console.log('🖼️ Starting image generation for', videoData.length, 'videos');
+
+      const response = await fetch('/api/generate-images', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ videoData }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.details || result.error || 'Image generation failed');
+      }
+
+      console.log('✅ Image generation request sent successfully:', result);
+      
+      // Show success message
+      alert(`Image generation started successfully! Request ID: ${result.requestId}\n\nProcessing ${result.videoCount} videos. You'll see the results in your Airtable once the webhook completes.`);
+      
+    } catch (error) {
+      console.error('Image generation error:', error);
+      
+      if (error instanceof Error && error.message.includes('webhook not configured')) {
+        alert('Image generation webhook is not configured. Please set GENERATE_IMAGES_WEBHOOK in your .env.local file.');
+      } else {
+        alert(`Failed to start image generation: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+    } finally {
+      setIsGeneratingImages(false);
+    }
   };
 
   const handleClearResults = async () => {
@@ -363,7 +414,7 @@ export default function VideosPage() {
                       variant="outline"
                       size="sm"
                       className="flex items-center gap-2"
-                      disabled
+                      disabled={data.records.length === 0}
                     >
                       <Wand2 className="w-4 h-4" />
                       Generate Titles
@@ -374,10 +425,14 @@ export default function VideosPage() {
                       variant="outline"
                       size="sm"
                       className="flex items-center gap-2"
-                      disabled
+                      disabled={isGeneratingImages || data.records.length === 0}
                     >
-                      <ImageIcon className="w-4 h-4" />
-                      Generate Thumbnail Assets
+                      {isGeneratingImages ? (
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
+                      ) : (
+                        <ImageIcon className="w-4 h-4" />
+                      )}
+                      {isGeneratingImages ? 'Generating...' : 'Generate Thumbnail Assets'}
                     </Button>
                     
                     <Button
@@ -480,6 +535,13 @@ export default function VideosPage() {
           </Card>
         </div>
       )}
+
+      {/* Generate Titles Modal */}
+      <GenerateTitlesModal
+        isOpen={showTitlesModal}
+        onClose={() => setShowTitlesModal(false)}
+        videoData={data?.records || []}
+      />
     </div>
   );
 }
