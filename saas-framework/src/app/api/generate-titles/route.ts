@@ -75,15 +75,39 @@ export async function POST(request: Request) {
 
     const webhookResult = await webhookResponse.json();
     console.log('✅ Title generation webhook succeeded:', webhookResult);
+    console.log('🔍 Webhook result type:', typeof webhookResult);
+    console.log('🔍 Webhook result is array:', Array.isArray(webhookResult));
+    console.log('🔍 Webhook result length:', webhookResult?.length);
+    console.log('🔍 Webhook result keys:', Object.keys(webhookResult));
+    
+    // Handle the webhook response format: array of strings directly
+    let generatedTitles = [];
+    if (Array.isArray(webhookResult) && webhookResult.length > 0) {
+      // n8n is sending array of strings directly
+      generatedTitles = webhookResult;
+      console.log('🔍 Extracted from array of strings:', generatedTitles);
+    } else if (webhookResult.generatedTitles) {
+      generatedTitles = webhookResult.generatedTitles;
+      console.log('🔍 Extracted from generatedTitles:', generatedTitles);
+    } else if (webhookResult.titles) {
+      generatedTitles = webhookResult.titles;
+      console.log('🔍 Extracted from titles:', generatedTitles);
+    }
+    
+    console.log('🔍 Final extracted titles:', generatedTitles);
+    console.log('🔍 Titles length:', generatedTitles.length);
 
-    return NextResponse.json({
+    const responseData = {
       success: true,
       message: 'Title generation request sent successfully',
       requestId: payload.requestId,
       titlesCount: titles.length,
-      generatedTitles: webhookResult.generatedTitles || webhookResult.titles || [],
+      generatedTitles: generatedTitles,
       webhookResponse: webhookResult
-    });
+    };
+
+    console.log('🔍 Final API response:', responseData);
+    return NextResponse.json(responseData);
 
   } catch (error) {
     console.error('Title generation API error:', error);

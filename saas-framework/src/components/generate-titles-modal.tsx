@@ -116,13 +116,19 @@ export function GenerateTitlesModal({ isOpen, onClose, videoData }: GenerateTitl
       });
 
       const result = await response.json();
+      
+      console.log('🔍 API Response:', result);
+      console.log('🔍 Response status:', response.status);
 
       if (!response.ok) {
         throw new Error(result.details || result.error || 'Title generation failed');
       }
 
-      // Parse the titles from response
+      // Parse the titles from response - simple array of strings format
       const titles = result.generatedTitles || result.titles || [];
+      console.log('🔍 Parsed titles:', titles);
+      
+      // Convert array of strings to objects with id and title
       const formattedTitles = titles.map((title: string, index: number) => ({
         id: `title_${index}`,
         title: title
@@ -170,6 +176,24 @@ export function GenerateTitlesModal({ isOpen, onClose, videoData }: GenerateTitl
       }, 2000);
     } catch (error) {
       console.error('Failed to copy title:', error);
+    }
+  };
+
+  const handleCopyAllTitles = async () => {
+    try {
+      const allTitles = generatedTitles.map(t => t.title).join('\n\n');
+      await navigator.clipboard.writeText(allTitles);
+      
+      // Show feedback by temporarily marking all as copied
+      const allTitleIds = generatedTitles.map(t => t.id);
+      setCopiedTitles(new Set(allTitleIds));
+      
+      // Clear the copied status after 3 seconds
+      setTimeout(() => {
+        setCopiedTitles(new Set());
+      }, 3000);
+    } catch (error) {
+      console.error('Failed to copy all titles:', error);
     }
   };
 
@@ -315,9 +339,20 @@ export function GenerateTitlesModal({ isOpen, onClose, videoData }: GenerateTitl
           <div className="space-y-4">
             {/* Results */}
             <div className="space-y-3">
-              <p className="text-sm text-muted-foreground">
-                Generated {generatedTitles.length} title suggestions:
-              </p>
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-muted-foreground">
+                  Generated {generatedTitles.length} title suggestions:
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleCopyAllTitles}
+                  className="flex items-center gap-2"
+                >
+                  <Copy className="w-4 h-4" />
+                  Copy All
+                </Button>
+              </div>
               
               <div className="space-y-3">
                 {generatedTitles.map((titleData) => (
